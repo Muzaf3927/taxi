@@ -100,6 +100,10 @@ class BookingController extends Controller
         $trip = PassengerTrip::find($booking->driver_trip_id);
         if ($trip) {
             $trip->update(['status' => 'completed']);
+            // Complete all other bookings for this trip
+            DriverBooking::where('driver_trip_id', $trip->id)
+                ->where('status', '!=', 'completed')
+                ->update(['status' => 'completed']);
         }
 
         return response()->json([
