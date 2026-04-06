@@ -83,6 +83,9 @@ class TripController extends Controller
 
         $trip->update(['status' => 'completed']);
 
+        // Complete all bookings for this trip
+        $trip->bookings()->where('status', '!=', 'completed')->update(['status' => 'completed']);
+
         return response()->json([
             'trip' => $trip,
         ]);
