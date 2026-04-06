@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('passenger_bookings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('passenger_id')->constrained('passengers')->cascadeOnDelete();
-            $table->foreignId('passenger_trip_id')->constrained('passenger_trips')->cascadeOnDelete();
+            $table->unsignedBigInteger('passenger_trip_id');
             $table->integer('seats');
             $table->enum('status', ['requested', 'in_progress', 'completed'])->default('in_progress');
             $table->decimal('offered_price', 12, 2)->nullable();

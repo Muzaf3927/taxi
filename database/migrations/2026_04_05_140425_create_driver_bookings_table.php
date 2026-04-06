@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('driver_bookings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('driver_id')->constrained('drivers')->cascadeOnDelete();
-            $table->foreignId('driver_trip_id')->constrained('driver_trips')->cascadeOnDelete();
+            $table->unsignedBigInteger('driver_trip_id');
             $table->integer('seats');
             $table->enum('status', ['requested', 'in_progress', 'completed'])->default('in_progress');
             $table->decimal('offered_price', 12, 2)->nullable();
