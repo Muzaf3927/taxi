@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taksi_app
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/var/www
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_CONNECTION=pgsql
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_DATABASE=taksi
+      - DB_USERNAME=taksi_user
+      - DB_PASSWORD=taksi_secret
+
+  db:
+    image: postgres:16-alpine
+    container_name: taksi_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: taksi
+      POSTGRES_USER: taksi_user
+      POSTGRES_PASSWORD: taksi_secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taksi_user -d taksi"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
