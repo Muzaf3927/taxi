@@ -91,11 +91,10 @@ class TelegramWebhookController extends Controller
 
                 $telegram->removeKeyboard($chatId,
                     "✅ <b>Kod yaratildi!</b>\n\n" .
-                    "🔑 Sizning kodingiz: <b>$otp</b>\n\n" .
                     "Ilovaga qaytib ushbu kodni kiriting.\n" .
-                    "⏱ Kod 5 daqiqa amal qiladi.\n\n" .
-                    "Yangi kod olish uchun istalgan xabar yuboring."
+                    "⏱ Kod 5 daqiqa amal qiladi."
                 );
+                $telegram->sendMessage($chatId, "<code>$otp</code>");
             } else {
                 $telegram->requestContact($chatId, "Iltimos, quyidagi tugmani bosib raqamingizni yuboring:");
             }
@@ -112,10 +111,11 @@ class TelegramWebhookController extends Controller
             ]);
 
             $telegram->sendMessage($chatId,
-                "🔑 Yangi kodingiz: <b>$otp</b>\n\n" .
-                "Ilovaga qaytib ushbu kodni kiriting.\n" .
+                "🔑 Yangi kod yaratildi!\n" .
+                "Ilovaga qaytib kiriting.\n" .
                 "⏱ Kod 5 daqiqa amal qiladi."
             );
+            $telegram->sendMessage($chatId, "<code>$otp</code>");
             return response('ok');
         }
 
