@@ -31,8 +31,7 @@ Route::prefix('admin')->group(function () {
 });
 
 Route::prefix('driver')->group(function () {
-    Route::post('/register', [DriverAuthController::class, 'register']);
-    Route::post('/login', [DriverAuthController::class, 'login']);
+    Route::post('/verify-otp', [DriverAuthController::class, 'verifyOtp']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [DriverAuthController::class, 'profile']);
@@ -56,8 +55,7 @@ Route::prefix('driver')->group(function () {
 });
 
 Route::prefix('passenger')->group(function () {
-    Route::post('/register', [PassengerAuthController::class, 'register']);
-    Route::post('/login', [PassengerAuthController::class, 'login']);
+    Route::post('/verify-otp', [PassengerAuthController::class, 'verifyOtp']);
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [PassengerAuthController::class, 'profile']);

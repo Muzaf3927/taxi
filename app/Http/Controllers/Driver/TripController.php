@@ -3,21 +3,34 @@
 namespace App\Http\Controllers\Driver;
 
 use App\Http\Controllers\Controller;
+use App\Models\Commission;
 use App\Models\DriverTrip;
 use App\Models\PassengerTrip;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 
 class TripController extends Controller
 {
     public function store(Request $request)
     {
+        $driver = $request->user();
+
+        if ($driver->balance < 10000) {
+            $deficit = 10000 - $driver->balance;
+            return response()->json([
+                'message' => "Balansingiz yetarli emas. Sayohat yaratish uchun hisobingizni {$deficit} so'mga to'ldiring.",
+                'deficit' => $deficit,
+            ], 403);
+        }
+
         $trip = DriverTrip::create([
-            'driver_id' => $request->user()->id,
+            'driver_id' => $driver->id,
             'from_address' => $request->from_address,
             'to_address' => $request->to_address,
             'date' => $request->date,
             'time' => $request->time,
             'seats' => $request->seats,
+            'available_seats' => $request->seats,
             'amount' => $request->amount,
             'postman' => $request->postman ?? false,
             'comment' => $request->comment,
@@ -84,7 +97,35 @@ class TripController extends Controller
         $trip->update(['status' => 'completed']);
 
         // Complete all bookings for this trip
+        $bookings = $trip->bookings()->where('status', '!=', 'completed')->get();
         $trip->bookings()->where('status', '!=', 'completed')->update(['status' => 'completed']);
+
+        // Списание комиссии с водителя за каждое бронирование
+        $driver = $request->user();
+        $percentage = (float) Setting::where('name', 'commission_percentage')->value('value');
+
+        if ($percentage > 0) {
+            $totalCommission = 0;
+
+            foreach ($bookings as $booking) {
+                $bookingTotal = $booking->offered_price * $booking->seats;
+                $commissionAmount = $bookingTotal * $percentage / 100;
+
+                Commission::create([
+                    'driver_id' => $driver->id,
+                    'driver_trip_id' => $trip->id,
+                    'percentage' => $percentage,
+                    'type' => 'driver_trip',
+                    'total_amount' => $commissionAmount,
+                ]);
+
+                $totalCommission += $commissionAmount;
+            }
+
+            if ($totalCommission > 0) {
+                $driver->decrement('balance', $totalCommission);
+            }
+        }
 
         return response()->json([
             'trip' => $trip,

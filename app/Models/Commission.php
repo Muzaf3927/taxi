@@ -9,6 +9,7 @@ class Commission extends Model
     protected $fillable = [
         'driver_id',
         'driver_trip_id',
+        'passenger_trip_id',
         'percentage',
         'type',
         'total_amount',
@@ -27,8 +28,13 @@ class Commission extends Model
         return $this->belongsTo(Driver::class);
     }
 
-    public function trip()
+    public function driverTrip()
     {
         return $this->belongsTo(DriverTrip::class, 'driver_trip_id');
+    }
+
+    public function passengerTrip()
+    {
+        return $this->belongsTo(PassengerTrip::class, 'passenger_trip_id');
     }
 }

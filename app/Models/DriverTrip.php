@@ -15,6 +15,7 @@ class DriverTrip extends Model
         'time',
         'amount',
         'seats',
+        'available_seats',
         'status',
         'from_lat',
         'from_lng',

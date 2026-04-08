@@ -7,7 +7,6 @@ use App\Models\Passenger;
 use App\Models\TelegramRegistration;
 use App\Services\TelegramService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 
 class TelegramWebhookController extends Controller
 {
@@ -33,82 +32,108 @@ class TelegramWebhookController extends Controller
         $chatId = $message['chat']['id'];
         $text = $message['text'] ?? '';
         $contact = $message['contact'] ?? null;
+        $firstName = $message['from']['first_name'] ?? 'User';
 
         $reg = TelegramRegistration::firstOrCreate(
             ['chat_id' => $chatId . '_' . $role],
             ['step' => 'start', 'role' => $role]
         );
 
-        // /start
-        if ($text === '/start') {
+        // /start или повторный запрос
+        if ($text === '/start' || $reg->step === 'start') {
             $reg->update(['step' => 'phone', 'phone' => null, 'name' => null, 'role' => $role]);
             $roleName = $role === 'passenger' ? "Yo'lovchi" : "Haydovchi";
-            $telegram->requestContact($chatId, "🚕 <b>Taksi - $roleName ro'yxatdan o'tish</b>\n\n📱 Telefon raqamingizni yuboring:");
+            $telegram->requestContact($chatId, "🚕 <b>Taksi - $roleName</b>\n\n📱 Telefon raqamingizni yuboring:");
             return response('ok');
         }
 
-        // Phone
+        // Получили номер телефона
         if ($reg->step === 'phone') {
             if ($contact) {
                 $phone = ltrim($contact['phone_number'], '+');
                 if (str_starts_with($phone, '998')) {
                     $phone = substr($phone, 3);
                 }
-                $reg->update(['phone' => $phone, 'step' => 'name']);
-                $telegram->removeKeyboard($chatId, "✅ Raqam qabul qilindi: <b>$phone</b>\n\nIsmingizni kiriting:");
+
+                // Создаём/обновляем пользователя
+                $data = [
+                    'name' => $firstName,
+                    'phone' => $phone,
+                    'telegram_id' => (string) $chatId,
+                ];
+
+                if ($role === 'passenger') {
+                    $user = Passenger::where('phone', $phone)->orWhere('telegram_id', (string) $chatId)->first();
+                    if ($user) {
+                        $user->update($data);
+                    } else {
+                        Passenger::create($data);
+                    }
+                } else {
+                    $user = Driver::where('phone', $phone)->orWhere('telegram_id', (string) $chatId)->first();
+                    if ($user) {
+                        $user->update($data);
+                    } else {
+                        Driver::create($data);
+                    }
+                }
+
+                // Генерируем уникальный OTP
+                $otp = $this->generateUniqueOtp($role);
+
+                $reg->update([
+                    'phone' => $phone,
+                    'name' => $firstName,
+                    'step' => 'done',
+                    'otp' => $otp,
+                    'otp_expires_at' => now()->addMinutes(5),
+                ]);
+
+                $telegram->removeKeyboard($chatId,
+                    "✅ <b>Kod yaratildi!</b>\n\n" .
+                    "🔑 Sizning kodingiz: <b>$otp</b>\n\n" .
+                    "Ilovaga qaytib ushbu kodni kiriting.\n" .
+                    "⏱ Kod 5 daqiqa amal qiladi.\n\n" .
+                    "Yangi kod olish uchun istalgan xabar yuboring."
+                );
             } else {
                 $telegram->requestContact($chatId, "Iltimos, quyidagi tugmani bosib raqamingizni yuboring:");
             }
             return response('ok');
         }
 
-        // Name
-        if ($reg->step === 'name') {
-            if (mb_strlen($text) < 2) {
-                $telegram->sendMessage($chatId, "Iltimos, to'g'ri ism kiriting.");
-                return response('ok');
-            }
-            $reg->update(['name' => $text, 'step' => 'password']);
-            $telegram->sendMessage($chatId, "🔐 Parol o'rnating (kamida 6 ta belgi):");
+        // Повторный запрос OTP (после done)
+        if ($reg->step === 'done' && $reg->phone) {
+            $otp = $this->generateUniqueOtp($role);
+
+            $reg->update([
+                'otp' => $otp,
+                'otp_expires_at' => now()->addMinutes(5),
+            ]);
+
+            $telegram->sendMessage($chatId,
+                "🔑 Yangi kodingiz: <b>$otp</b>\n\n" .
+                "Ilovaga qaytib ushbu kodni kiriting.\n" .
+                "⏱ Kod 5 daqiqa amal qiladi."
+            );
             return response('ok');
         }
 
-        // Password
-        if ($reg->step === 'password') {
-            if (mb_strlen($text) < 6) {
-                $telegram->sendMessage($chatId, "Parol kamida 6 ta belgidan iborat bo'lishi kerak. Qaytadan kiriting:");
-                return response('ok');
-            }
-
-            $data = [
-                'name' => $reg->name,
-                'password' => Hash::make($text),
-                'phone' => $reg->phone,
-                'telegram_id' => $chatId,
-            ];
-
-            if ($role === 'passenger') {
-                $user = Passenger::where('phone', $reg->phone)->orWhere('telegram_id', $chatId)->first();
-                if ($user) {
-                    $user->update($data);
-                } else {
-                    Passenger::create($data);
-                }
-            } else {
-                $user = Driver::where('phone', $reg->phone)->orWhere('telegram_id', $chatId)->first();
-                if ($user) {
-                    $user->update($data);
-                } else {
-                    Driver::create($data);
-                }
-            }
-
-            $reg->update(['step' => 'done']);
-            $telegram->sendMessage($chatId, "✅ <b>Ro'yxatdan muvaffaqiyatli o'tdingiz!</b>\n\nIlovaga qaytib quyidagi ma'lumotlar bilan kiring:\n\n📱 Telefon: <b>{$reg->phone}</b>\n🔐 Parol: <b>{$text}</b>\n\nQayta ro'yxatdan o'tish uchun /start bosing.");
-            return response('ok');
-        }
-
-        $telegram->sendMessage($chatId, "Qayta ro'yxatdan o'tish uchun /start bosing.");
+        $telegram->sendMessage($chatId, "Boshlash uchun /start bosing.");
         return response('ok');
+    }
+
+    protected function generateUniqueOtp(string $role): string
+    {
+        do {
+            $otp = str_pad(random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+        } while (
+            TelegramRegistration::where('role', $role)
+                ->where('otp', $otp)
+                ->where('otp_expires_at', '>', now())
+                ->exists()
+        );
+
+        return $otp;
     }
 }

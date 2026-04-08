@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('telegram_id')->nullable()->unique();
-            $table->string('password');
+            $table->string('password')->nullable();
             $table->string('phone');
             $table->decimal('balance', 12, 2)->default(0);
             $table->boolean('is_blocked')->default(false);

@@ -3,68 +3,130 @@
 namespace App\Http\Controllers\Driver;
 
 use App\Http\Controllers\Controller;
+use App\Models\Commission;
 use App\Models\DriverBooking;
 use App\Models\DriverTrip;
 use App\Models\PassengerBooking;
 use App\Models\Passenger;
 use App\Models\PassengerTrip;
+use App\Models\Setting;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class BookingController extends Controller
 {
     public function store(Request $request)
     {
-        $trip = PassengerTrip::findOrFail($request->passenger_trip_id);
+        return DB::transaction(function () use ($request) {
+            $trip = PassengerTrip::lockForUpdate()->findOrFail($request->passenger_trip_id);
 
-        $exists = DriverBooking::where('driver_id', $request->user()->id)
-            ->where('driver_trip_id', $trip->id)
-            ->exists();
+            // Проверяем что трип ещё свободен
+            if ($trip->status !== 'active') {
+                return response()->json([
+                    'message' => 'Bu sayohat allaqachon band qilingan.',
+                ], 409);
+            }
 
-        if ($exists) {
+            $exists = DriverBooking::where('driver_id', $request->user()->id)
+                ->where('driver_trip_id', $trip->id)
+                ->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'message' => 'Siz allaqachon bu sayohatni band qilgansiz',
+                ], 409);
+            }
+
+            $driver = $request->user();
+            $percentage = (float) Setting::where('name', 'commission_percentage')->value('value');
+            $commissionAmount = $trip->amount * $percentage / 100;
+
+            if ($driver->balance < $commissionAmount) {
+                $deficit = $commissionAmount - $driver->balance;
+                return response()->json([
+                    'message' => "Balansingiz yetarli emas. Band qilish uchun hisobingizni {$deficit} so'mga to'ldiring.",
+                    'deficit' => $deficit,
+                ], 403);
+            }
+
+            $trip->update(['status' => 'in_progress']);
+
+            $booking = DriverBooking::create([
+                'driver_id' => $driver->id,
+                'driver_trip_id' => $trip->id,
+                'seats' => $trip->seats,
+                'status' => 'in_progress',
+                'offered_price' => $trip->amount,
+                'comment' => $request->comment,
+            ]);
+
+            // Notify passenger via Telegram
+            $passenger = Passenger::find($trip->passenger_id);
+            if ($passenger && $passenger->telegram_id) {
+                TelegramNotificationService::notifyPassenger(
+                    $passenger->telegram_id,
+                    $driver->name,
+                    $driver->phone,
+                    $trip->from_address,
+                    $trip->to_address
+                );
+            }
+
             return response()->json([
-                'message' => 'Siz allaqachon bu sayohatni band qilgansiz',
-            ], 409);
-        }
-
-        $trip->update(['status' => 'in_progress']);
-
-        $booking = DriverBooking::create([
-            'driver_id' => $request->user()->id,
-            'driver_trip_id' => $trip->id,
-            'seats' => $trip->seats,
-            'status' => 'in_progress',
-            'offered_price' => $trip->amount,
-            'comment' => $request->comment,
-        ]);
-
-        // Notify passenger via Telegram
-        $passenger = Passenger::find($trip->passenger_id);
-        $driver = $request->user();
-        if ($passenger && $passenger->telegram_id) {
-            TelegramNotificationService::notifyPassenger(
-                $passenger->telegram_id,
-                $driver->name,
-                $driver->phone,
-                $trip->from_address,
-                $trip->to_address
-            );
-        }
-
-        return response()->json([
-            'booking' => $booking,
-        ], 201);
+                'booking' => $booking,
+            ], 201);
+        });
     }
 
     public function accept(Request $request, $id)
     {
-        $booking = PassengerBooking::findOrFail($id);
+        return DB::transaction(function () use ($request, $id) {
+            $booking = PassengerBooking::findOrFail($id);
+            $trip = DriverTrip::lockForUpdate()->findOrFail($booking->passenger_trip_id);
 
-        $booking->update(['status' => 'in_progress']);
+            // Проверяем хватает ли мест
+            if ($trip->available_seats < $booking->seats) {
+                return response()->json([
+                    'message' => "{$trip->available_seats} ta bo'sh joy qoldi, {$booking->seats} ta joy uchun qabul qilib bo'lmaydi.",
+                ], 409);
+            }
 
-        return response()->json([
-            'booking' => $booking,
-        ]);
+            $booking->update(['status' => 'in_progress']);
+            $trip->decrement('available_seats', $booking->seats);
+
+            // Если места закончились — удаляем все requested и трип → in_progress
+            if ($trip->fresh()->available_seats <= 0) {
+                PassengerBooking::where('passenger_trip_id', $trip->id)
+                    ->where('status', 'requested')
+                    ->delete();
+                $trip->update(['status' => 'in_progress']);
+            }
+
+            // Авто-отмена дублей пассажира (тот же день, < 1 час разницы)
+            $tripTime = Carbon::parse($trip->date->format('Y-m-d') . ' ' . $trip->time);
+            $passengerOtherBookings = PassengerBooking::where('passenger_id', $booking->passenger_id)
+                ->where('id', '!=', $booking->id)
+                ->where('status', 'requested')
+                ->get();
+
+            foreach ($passengerOtherBookings as $otherBooking) {
+                $otherTrip = DriverTrip::find($otherBooking->passenger_trip_id);
+                if (!$otherTrip) continue;
+
+                $otherTripTime = Carbon::parse($otherTrip->date->format('Y-m-d') . ' ' . $otherTrip->time);
+
+                // Тот же день и разница < 1 час
+                if ($tripTime->isSameDay($otherTripTime) && abs($tripTime->diffInMinutes($otherTripTime)) < 60) {
+                    $otherBooking->delete();
+                }
+            }
+
+            return response()->json([
+                'booking' => $booking,
+            ]);
+        });
     }
 
     public function reject(Request $request, $id)
@@ -104,6 +166,24 @@ class BookingController extends Controller
             DriverBooking::where('driver_trip_id', $trip->id)
                 ->where('status', '!=', 'completed')
                 ->update(['status' => 'completed']);
+        }
+
+        // Списание комиссии с водителя
+        $driver = $request->user();
+        $percentage = (float) Setting::where('name', 'commission_percentage')->value('value');
+
+        if ($percentage > 0) {
+            $commissionAmount = $booking->offered_price * $percentage / 100;
+
+            Commission::create([
+                'driver_id' => $driver->id,
+                'passenger_trip_id' => $trip?->id,
+                'percentage' => $percentage,
+                'type' => 'passenger_trip',
+                'total_amount' => $commissionAmount,
+            ]);
+
+            $driver->decrement('balance', $commissionAmount);
         }
 
         return response()->json([

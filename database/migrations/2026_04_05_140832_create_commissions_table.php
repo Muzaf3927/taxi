@@ -14,7 +14,8 @@ return new class extends Migration
         Schema::create('commissions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('driver_id')->constrained('drivers')->cascadeOnDelete();
-            $table->foreignId('driver_trip_id')->constrained('driver_trips')->cascadeOnDelete();
+            $table->foreignId('driver_trip_id')->nullable()->constrained('driver_trips')->cascadeOnDelete();
+            $table->foreignId('passenger_trip_id')->nullable()->constrained('passenger_trips')->cascadeOnDelete();
             $table->decimal('percentage', 5, 2);
             $table->string('type');
             $table->decimal('total_amount', 12, 2);

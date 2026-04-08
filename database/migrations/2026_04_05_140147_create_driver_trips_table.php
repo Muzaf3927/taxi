@@ -21,6 +21,7 @@ return new class extends Migration
             $table->time('time');
             $table->decimal('amount', 12, 2);
             $table->integer('seats');
+            $table->integer('available_seats');
             $table->enum('status', ['active', 'in_progress', 'completed'])->default('active');
             $table->text('comment')->nullable();
             $table->decimal('from_lat', 10, 7)->nullable();

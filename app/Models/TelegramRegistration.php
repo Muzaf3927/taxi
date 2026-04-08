@@ -12,5 +12,14 @@ class TelegramRegistration extends Model
         'name',
         'step',
         'role',
+        'otp',
+        'otp_expires_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'otp_expires_at' => 'datetime',
+        ];
+    }
 }

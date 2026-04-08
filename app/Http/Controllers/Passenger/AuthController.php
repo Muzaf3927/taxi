@@ -4,39 +4,43 @@ namespace App\Http\Controllers\Passenger;
 
 use App\Http\Controllers\Controller;
 use App\Models\Passenger;
+use App\Models\TelegramRegistration;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function register(Request $request)
+    public function verifyOtp(Request $request)
     {
-        $passenger = Passenger::create([
-            'name' => $request->name,
-            'phone' => $request->phone,
-            'password' => Hash::make($request->password),
-        ]);
+        $reg = TelegramRegistration::where('role', 'passenger')
+            ->where('otp', $request->otp)
+            ->where('otp_expires_at', '>', now())
+            ->first();
 
-        $token = $passenger->createToken('passenger-token', expiresAt: now()->addMonths(3));
-
-        return response()->json([
-            'passenger' => $passenger,
-            'token' => $token->plainTextToken,
-        ], 201);
-    }
-
-    public function login(Request $request)
-    {
-        $passenger = Passenger::where('phone', $request->phone)->first();
-
-        if (!$passenger || !Hash::check($request->password, $passenger->password)) {
+        if (!$reg) {
             return response()->json([
-                'message' => 'Telefon raqam yoki parol noto\'g\'ri',
+                'message' => 'Kod noto\'g\'ri yoki eskirgan. Telegramda yangi kod oling.',
             ], 401);
         }
 
-        $passenger->tokens()->delete();
+        $passenger = Passenger::where('phone', $reg->phone)->first();
 
+        if (!$passenger) {
+            return response()->json([
+                'message' => 'Foydalanuvchi topilmadi. Avval Telegram botga /start yuboring.',
+            ], 404);
+        }
+
+        if ($passenger->is_blocked) {
+            return response()->json([
+                'message' => 'Sizning hisobingiz bloklangan.',
+            ], 403);
+        }
+
+        // Обнуляем OTP
+        $reg->update(['otp' => null, 'otp_expires_at' => null]);
+
+        // Удаляем старые токены, выдаём новый
+        $passenger->tokens()->delete();
         $token = $passenger->createToken('passenger-token', expiresAt: now()->addMonths(3));
 
         return response()->json([

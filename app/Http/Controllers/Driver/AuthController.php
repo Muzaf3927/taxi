@@ -4,39 +4,43 @@ namespace App\Http\Controllers\Driver;
 
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
+use App\Models\TelegramRegistration;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function register(Request $request)
+    public function verifyOtp(Request $request)
     {
-        $driver = Driver::create([
-            'name' => $request->name,
-            'phone' => $request->phone,
-            'password' => Hash::make($request->password),
-        ]);
+        $reg = TelegramRegistration::where('role', 'driver')
+            ->where('otp', $request->otp)
+            ->where('otp_expires_at', '>', now())
+            ->first();
 
-        $token = $driver->createToken('driver-token', expiresAt: now()->addMonths(3));
-
-        return response()->json([
-            'driver' => $driver,
-            'token' => $token->plainTextToken,
-        ], 201);
-    }
-
-    public function login(Request $request)
-    {
-        $driver = Driver::where('phone', $request->phone)->first();
-
-        if (!$driver || !Hash::check($request->password, $driver->password)) {
+        if (!$reg) {
             return response()->json([
-                'message' => 'Telefon raqam yoki parol noto\'g\'ri',
+                'message' => 'Kod noto\'g\'ri yoki eskirgan. Telegramda yangi kod oling.',
             ], 401);
         }
 
-        $driver->tokens()->delete();
+        $driver = Driver::where('phone', $reg->phone)->first();
 
+        if (!$driver) {
+            return response()->json([
+                'message' => 'Foydalanuvchi topilmadi. Avval Telegram botga /start yuboring.',
+            ], 404);
+        }
+
+        if ($driver->is_blocked) {
+            return response()->json([
+                'message' => 'Sizning hisobingiz bloklangan.',
+            ], 403);
+        }
+
+        // Обнуляем OTP
+        $reg->update(['otp' => null, 'otp_expires_at' => null]);
+
+        // Удаляем старые токены, выдаём новый
+        $driver->tokens()->delete();
         $token = $driver->createToken('driver-token', expiresAt: now()->addMonths(3));
 
         return response()->json([
