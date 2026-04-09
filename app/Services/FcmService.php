@@ -22,17 +22,27 @@ class FcmService
 
     public static function send(string $fcmToken, string $title, string $body, array $data = []): void
     {
-        $credentials = self::getCredentials();
-        if (!$credentials) {
+        $projectId = env('FIREBASE_PROJECT_ID');
+        $clientEmail = env('FIREBASE_CLIENT_EMAIL');
+        $privateKey = env('FIREBASE_PRIVATE_KEY');
+
+        if (!$projectId || !$clientEmail || !$privateKey) {
+            // Fallback to credentials file
+            $path = env('FIREBASE_CREDENTIALS_PATH', 'storage/app/firebase-credentials.json');
+            $fullPath = file_exists($path) ? $path : base_path($path);
+            if (file_exists($fullPath)) {
+                $creds = json_decode(file_get_contents($fullPath), true);
+                $projectId = $creds['project_id'] ?? null;
+                $clientEmail = $creds['client_email'] ?? null;
+                $privateKey = $creds['private_key'] ?? null;
+            }
+        }
+
+        if (!$projectId || !$clientEmail || !$privateKey) {
             return;
         }
 
-        $projectId = $credentials['project_id'] ?? null;
-        if (!$projectId) {
-            return;
-        }
-
-        $accessToken = self::getAccessToken($credentials);
+        $accessToken = self::getAccessToken($clientEmail, $privateKey);
         if (!$accessToken) {
             return;
         }
@@ -74,35 +84,15 @@ class FcmService
         }
     }
 
-    private static function getCredentials(): ?array
-    {
-        // Try env variable first (base64 encoded JSON)
-        $base64 = env('FIREBASE_CREDENTIALS_BASE64');
-        if ($base64) {
-            $json = base64_decode($base64);
-            $credentials = json_decode($json, true);
-            if ($credentials) {
-                return $credentials;
-            }
-        }
-
-        // Fallback to file
-        $path = env('FIREBASE_CREDENTIALS_PATH', 'storage/app/firebase-credentials.json');
-        $fullPath = file_exists($path) ? $path : base_path($path);
-        if (file_exists($fullPath)) {
-            return json_decode(file_get_contents($fullPath), true);
-        }
-
-        Log::info('Firebase credentials not configured, skipping FCM');
-        return null;
-    }
-
-    private static function getAccessToken(array $credentials): ?string
+    private static function getAccessToken(string $clientEmail, string $privateKey): ?string
     {
         try {
+            // Replace literal \n with actual newlines
+            $privateKey = str_replace('\\n', "\n", $privateKey);
+
             $client = new \Google\Auth\OAuth2([
-                'issuer' => $credentials['client_email'],
-                'signingKey' => $credentials['private_key'],
+                'issuer' => $clientEmail,
+                'signingKey' => $privateKey,
                 'signingAlgorithm' => 'RS256',
                 'tokenCredentialUri' => 'https://oauth2.googleapis.com/token',
                 'audience' => 'https://oauth2.googleapis.com/token',
