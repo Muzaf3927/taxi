@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers\Driver;
 
+use App\Events\DriverTripCreated;
+use App\Events\TripStatusChanged;
+use App\Events\BookingStatusChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Commission;
 use App\Models\DriverTrip;
 use App\Models\PassengerTrip;
 use App\Models\Setting;
+use App\Services\FcmService;
 use Illuminate\Http\Request;
 
 class TripController extends Controller
@@ -35,6 +39,9 @@ class TripController extends Controller
             'postman' => $request->postman ?? false,
             'comment' => $request->comment,
         ]);
+
+        $trip->load('driver.cars');
+        broadcast(new DriverTripCreated($trip->toArray()));
 
         return response()->json([
             'trip' => $trip,
@@ -124,6 +131,15 @@ class TripController extends Controller
 
             if ($totalCommission > 0) {
                 $driver->decrement('balance', $totalCommission);
+            }
+        }
+
+        // Notify all passengers who had bookings on this trip
+        foreach ($bookings as $booking) {
+            $passenger = $booking->passenger;
+            if ($passenger) {
+                broadcast(new TripStatusChanged($trip->id, 'driver_trip', 'completed', 'passenger', $passenger->id));
+                FcmService::sendToUser($passenger, 'Sayohat yakunlandi', "{$trip->from_address} → {$trip->to_address}");
             }
         }
 

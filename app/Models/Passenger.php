@@ -17,6 +17,7 @@ class Passenger extends Model
         'balance',
         'is_blocked',
         'rating',
+        'fcm_token',
     ];
 
     protected $hidden = [

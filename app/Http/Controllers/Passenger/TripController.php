@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers\Passenger;
 
+use App\Events\PassengerTripCreated;
+use App\Events\TripStatusChanged;
+use App\Events\BookingStatusChanged;
 use App\Http\Controllers\Controller;
+use App\Models\Driver;
 use App\Models\DriverTrip;
 use App\Models\PassengerTrip;
+use App\Services\FcmService;
 use Illuminate\Http\Request;
 
 class TripController extends Controller
@@ -22,6 +27,9 @@ class TripController extends Controller
             'postman' => $request->postman ?? false,
             'comment' => $request->comment,
         ]);
+
+        $trip->load('passenger');
+        broadcast(new PassengerTripCreated($trip->toArray()));
 
         return response()->json([
             'trip' => $trip,
@@ -84,7 +92,17 @@ class TripController extends Controller
         $trip->update(['status' => 'completed']);
 
         // Complete all bookings for this trip
+        $bookings = $trip->bookings()->where('status', '!=', 'completed')->get();
         $trip->bookings()->where('status', '!=', 'completed')->update(['status' => 'completed']);
+
+        // Notify drivers who had bookings
+        foreach ($bookings as $booking) {
+            $driver = Driver::find($booking->driver_id);
+            if ($driver) {
+                broadcast(new TripStatusChanged($trip->id, 'passenger_trip', 'completed', 'driver', $driver->id));
+                FcmService::sendToUser($driver, 'Sayohat yakunlandi', "{$trip->from_address} → {$trip->to_address}");
+            }
+        }
 
         return response()->json([
             'trip' => $trip,
