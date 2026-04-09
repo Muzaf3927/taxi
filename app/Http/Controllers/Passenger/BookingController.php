@@ -2,14 +2,10 @@
 
 namespace App\Http\Controllers\Passenger;
 
-use App\Events\BookingCreated;
-use App\Events\BookingStatusChanged;
-use App\Events\TripStatusChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Driver;
 use App\Models\DriverTrip;
 use App\Models\PassengerBooking;
-use App\Services\FcmService;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -98,16 +94,6 @@ class BookingController extends Controller
                 }
             }
 
-            // Real-time notification to driver
-            if ($driver) {
-                $booking->load('passenger');
-                broadcast(new BookingCreated($booking->toArray(), 'driver', $driver->id));
-                $msg = $request->offered_price
-                    ? "Yangi narx taklifi: {$request->offered_price} so'm"
-                    : "Yangi band: {$seats} ta joy";
-                FcmService::sendToUser($driver, 'Yangi band!', $msg);
-            }
-
             return response()->json([
                 'booking' => $booking,
             ], 201);
@@ -144,19 +130,13 @@ class BookingController extends Controller
         // Notify driver
         if ($trip) {
             $driver = Driver::find($trip->driver_id);
-            if ($driver) {
-                broadcast(new BookingStatusChanged($booking->id, 'cancelled', $booking->toArray(), 'driver', $driver->id));
-                broadcast(new TripStatusChanged($trip->id, 'driver_trip', $trip->fresh()->status, 'driver', $driver->id));
-                FcmService::sendToUser($driver, 'Band bekor qilindi', "Yo'lovchi bandni bekor qildi: {$trip->from_address} → {$trip->to_address}");
-
-                if ($driver->telegram_id) {
-                    $telegram = new \App\Services\TelegramService(env('TELEGRAM_DRIVER_BOT_TOKEN'));
-                    $telegram->sendMessage((int) $driver->telegram_id,
-                        "⚠️ <b>Yo'lovchi bandni bekor qildi</b>\n\n" .
-                        "📍 {$trip->from_address} → {$trip->to_address}\n\n" .
-                        "Boshqa yo'lovchi qidirilmoqda..."
-                    );
-                }
+            if ($driver && $driver->telegram_id) {
+                $telegram = new \App\Services\TelegramService(env('TELEGRAM_DRIVER_BOT_TOKEN'));
+                $telegram->sendMessage((int) $driver->telegram_id,
+                    "⚠️ <b>Yo'lovchi bandni bekor qildi</b>\n\n" .
+                    "📍 {$trip->from_address} → {$trip->to_address}\n\n" .
+                    "Boshqa yo'lovchi qidirilmoqda..."
+                );
             }
         }
 

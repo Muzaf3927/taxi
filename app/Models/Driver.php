@@ -17,7 +17,6 @@ class Driver extends Model
         'balance',
         'is_blocked',
         'rating',
-        'fcm_token',
     ];
 
     protected $hidden = [

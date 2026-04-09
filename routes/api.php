@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
@@ -17,11 +16,6 @@ use App\Http\Controllers\Passenger\TripController as PassengerTripController;
 
 Route::post('/telegram/passenger', [TelegramWebhookController::class, 'passenger']);
 Route::post('/telegram/driver', [TelegramWebhookController::class, 'driver']);
-
-// Broadcasting auth for Pusher private channels
-Route::middleware('auth:sanctum')->post('/broadcasting/auth', function (\Illuminate\Http\Request $request) {
-    return Broadcast::auth($request);
-});
 
 Route::prefix('admin')->group(function () {
     Route::post('/register', [AdminAuthController::class, 'register']);
@@ -45,7 +39,6 @@ Route::prefix('driver')->group(function () {
         Route::post('/logout', [DriverAuthController::class, 'logout']);
 
         Route::post('/car', [CarController::class, 'store']);
-        Route::post('/fcm-token', [DriverAuthController::class, 'updateFcmToken']);
         Route::get('/my-trips', [DriverTripController::class, 'myTrips']);
         Route::get('/history', [DriverTripController::class, 'history']);
         Route::post('/trip', [DriverTripController::class, 'store']);
@@ -69,7 +62,6 @@ Route::prefix('passenger')->group(function () {
         Route::post('/profile', [PassengerAuthController::class, 'updateProfile']);
         Route::post('/logout', [PassengerAuthController::class, 'logout']);
 
-        Route::post('/fcm-token', [PassengerAuthController::class, 'updateFcmToken']);
         Route::get('/my-trips', [PassengerTripController::class, 'myTrips']);
         Route::get('/history', [PassengerTripController::class, 'history']);
         Route::post('/trip', [PassengerTripController::class, 'store']);

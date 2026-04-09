@@ -2,9 +2,6 @@
 
 namespace App\Http\Controllers\Driver;
 
-use App\Events\BookingCreated;
-use App\Events\BookingStatusChanged;
-use App\Events\TripStatusChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Commission;
 use App\Models\DriverBooking;
@@ -13,7 +10,6 @@ use App\Models\PassengerBooking;
 use App\Models\Passenger;
 use App\Models\PassengerTrip;
 use App\Models\Setting;
-use App\Services\FcmService;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -78,14 +74,6 @@ class BookingController extends Controller
                 );
             }
 
-            // Real-time notification to passenger
-            if ($passenger) {
-                $booking->load('driver.cars');
-                broadcast(new BookingCreated($booking->toArray(), 'passenger', $passenger->id));
-                broadcast(new TripStatusChanged($trip->id, 'passenger_trip', 'in_progress', 'passenger', $passenger->id));
-                FcmService::sendToUser($passenger, 'Haydovchi topildi!', "{$driver->name} sizning sayohatingizni qabul qildi");
-            }
-
             return response()->json([
                 'booking' => $booking,
             ], 201);
@@ -116,13 +104,6 @@ class BookingController extends Controller
                 $trip->update(['status' => 'in_progress']);
             }
 
-            // Notify passenger that booking was accepted
-            broadcast(new BookingStatusChanged($booking->id, 'in_progress', $booking->toArray(), 'passenger', $booking->passenger_id));
-            $passengerModel = Passenger::find($booking->passenger_id);
-            if ($passengerModel) {
-                FcmService::sendToUser($passengerModel, 'Band qabul qilindi!', "{$trip->from_address} → {$trip->to_address}");
-            }
-
             // Авто-отмена дублей пассажира (тот же день, < 1 час разницы)
             $tripTime = Carbon::parse($trip->date->format('Y-m-d') . ' ' . $trip->time);
             $passengerOtherBookings = PassengerBooking::where('passenger_id', $booking->passenger_id)
@@ -151,13 +132,6 @@ class BookingController extends Controller
     public function reject(Request $request, $id)
     {
         $booking = PassengerBooking::findOrFail($id);
-        $passengerId = $booking->passenger_id;
-
-        broadcast(new BookingStatusChanged($booking->id, 'rejected', $booking->toArray(), 'passenger', $passengerId));
-        $passengerModel = Passenger::find($passengerId);
-        if ($passengerModel) {
-            FcmService::sendToUser($passengerModel, 'Band rad etildi', 'Haydovchi sizning bandingizni rad etdi');
-        }
 
         $booking->delete();
 
@@ -192,14 +166,6 @@ class BookingController extends Controller
             DriverBooking::where('driver_trip_id', $trip->id)
                 ->where('status', '!=', 'completed')
                 ->update(['status' => 'completed']);
-
-            // Notify passenger
-            $passenger = Passenger::find($trip->passenger_id);
-            if ($passenger) {
-                broadcast(new BookingStatusChanged($booking->id, 'completed', $booking->toArray(), 'passenger', $passenger->id));
-                broadcast(new TripStatusChanged($trip->id, 'passenger_trip', 'completed', 'passenger', $passenger->id));
-                FcmService::sendToUser($passenger, 'Sayohat yakunlandi', "{$trip->from_address} → {$trip->to_address}");
-            }
         }
 
         // Списание комиссии с водителя
@@ -239,19 +205,13 @@ class BookingController extends Controller
         // Notify passenger
         if ($trip) {
             $passenger = Passenger::find($trip->passenger_id);
-            if ($passenger) {
-                broadcast(new BookingStatusChanged($booking->id, 'cancelled', $booking->toArray(), 'passenger', $passenger->id));
-                broadcast(new TripStatusChanged($trip->id, 'passenger_trip', 'active', 'passenger', $passenger->id));
-                FcmService::sendToUser($passenger, 'Band bekor qilindi', "Haydovchi bandni bekor qildi: {$trip->from_address} → {$trip->to_address}");
-
-                if ($passenger->telegram_id) {
-                    $telegram = new \App\Services\TelegramService(env('TELEGRAM_PASSENGER_BOT_TOKEN'));
-                    $telegram->sendMessage((int) $passenger->telegram_id,
-                        "⚠️ <b>Haydovchi bandni bekor qildi</b>\n\n" .
-                        "📍 {$trip->from_address} → {$trip->to_address}\n\n" .
-                        "Boshqa haydovchi qidirilmoqda..."
-                    );
-                }
+            if ($passenger && $passenger->telegram_id) {
+                $telegram = new \App\Services\TelegramService(env('TELEGRAM_PASSENGER_BOT_TOKEN'));
+                $telegram->sendMessage((int) $passenger->telegram_id,
+                    "⚠️ <b>Haydovchi bandni bekor qildi</b>\n\n" .
+                    "📍 {$trip->from_address} → {$trip->to_address}\n\n" .
+                    "Boshqa haydovchi qidirilmoqda..."
+                );
             }
         }
 
