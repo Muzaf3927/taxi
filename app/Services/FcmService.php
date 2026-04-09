@@ -22,21 +22,17 @@ class FcmService
 
     public static function send(string $fcmToken, string $title, string $body, array $data = []): void
     {
-        $credentialsPath = env('FIREBASE_CREDENTIALS_PATH');
-        if (!$credentialsPath || !file_exists(base_path($credentialsPath)) && !file_exists($credentialsPath)) {
-            Log::info('Firebase credentials not configured, skipping FCM');
+        $credentials = self::getCredentials();
+        if (!$credentials) {
             return;
         }
 
-        $fullPath = file_exists($credentialsPath) ? $credentialsPath : base_path($credentialsPath);
-        $credentials = json_decode(file_get_contents($fullPath), true);
         $projectId = $credentials['project_id'] ?? null;
-
         if (!$projectId) {
             return;
         }
 
-        $accessToken = self::getAccessToken($fullPath);
+        $accessToken = self::getAccessToken($credentials);
         if (!$accessToken) {
             return;
         }
@@ -78,12 +74,35 @@ class FcmService
         }
     }
 
-    private static function getAccessToken(string $credentialsPath): ?string
+    private static function getCredentials(): ?array
+    {
+        // Try env variable first (base64 encoded JSON)
+        $base64 = env('FIREBASE_CREDENTIALS_BASE64');
+        if ($base64) {
+            $json = base64_decode($base64);
+            $credentials = json_decode($json, true);
+            if ($credentials) {
+                return $credentials;
+            }
+        }
+
+        // Fallback to file
+        $path = env('FIREBASE_CREDENTIALS_PATH', 'storage/app/firebase-credentials.json');
+        $fullPath = file_exists($path) ? $path : base_path($path);
+        if (file_exists($fullPath)) {
+            return json_decode(file_get_contents($fullPath), true);
+        }
+
+        Log::info('Firebase credentials not configured, skipping FCM');
+        return null;
+    }
+
+    private static function getAccessToken(array $credentials): ?string
     {
         try {
             $client = new \Google\Auth\OAuth2([
-                'issuer' => json_decode(file_get_contents($credentialsPath), true)['client_email'],
-                'signingKey' => json_decode(file_get_contents($credentialsPath), true)['private_key'],
+                'issuer' => $credentials['client_email'],
+                'signingKey' => $credentials['private_key'],
                 'signingAlgorithm' => 'RS256',
                 'tokenCredentialUri' => 'https://oauth2.googleapis.com/token',
                 'audience' => 'https://oauth2.googleapis.com/token',
