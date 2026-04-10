@@ -5,6 +5,7 @@ use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\BalanceController;
 use App\Http\Controllers\Admin\CommissionController;
+use App\Http\Controllers\Admin\TripController as AdminTripController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Driver\AuthController as DriverAuthController;
 use App\Http\Controllers\Driver\CarController;
@@ -29,6 +30,8 @@ Route::prefix('admin')->group(function () {
         Route::get('/passengers', [UserController::class, 'passengers']);
         Route::post('/driver/{id}/toggle-block', [UserController::class, 'toggleDriverBlock']);
         Route::post('/passenger/{id}/toggle-block', [UserController::class, 'togglePassengerBlock']);
+        Route::get('/driver-trips', [AdminTripController::class, 'driverTrips']);
+        Route::get('/passenger-trips', [AdminTripController::class, 'passengerTrips']);
     });
 });
 
