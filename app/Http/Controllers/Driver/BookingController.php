@@ -104,6 +104,20 @@ class BookingController extends Controller
                 $trip->update(['status' => 'in_progress']);
             }
 
+            // Уведомить пассажира что бронь принята
+            $passenger = \App\Models\Passenger::find($booking->passenger_id);
+            $driver = $request->user();
+            if ($passenger && $passenger->telegram_id) {
+                TelegramNotificationService::notifyPassengerAccepted(
+                    $passenger->telegram_id,
+                    $driver->name,
+                    $driver->phone,
+                    $booking->seats,
+                    $trip->from_address,
+                    $trip->to_address
+                );
+            }
+
             // Авто-отмена дублей пассажира (тот же день, < 1 час разницы)
             $tripTime = Carbon::parse($trip->date->format('Y-m-d') . ' ' . $trip->time);
             $passengerOtherBookings = PassengerBooking::where('passenger_id', $booking->passenger_id)
@@ -132,6 +146,17 @@ class BookingController extends Controller
     public function reject(Request $request, $id)
     {
         $booking = PassengerBooking::findOrFail($id);
+        $trip = DriverTrip::find($booking->passenger_trip_id);
+
+        // Уведомить пассажира что бронь отклонена
+        $passenger = \App\Models\Passenger::find($booking->passenger_id);
+        if ($passenger && $passenger->telegram_id && $trip) {
+            TelegramNotificationService::notifyPassengerRejected(
+                $passenger->telegram_id,
+                $trip->from_address,
+                $trip->to_address
+            );
+        }
 
         $booking->delete();
 
@@ -166,6 +191,17 @@ class BookingController extends Controller
             DriverBooking::where('driver_trip_id', $trip->id)
                 ->where('status', '!=', 'completed')
                 ->update(['status' => 'completed']);
+
+            // Уведомить пассажира что поездка завершена
+            $passenger = Passenger::find($trip->passenger_id);
+            if ($passenger && $passenger->telegram_id) {
+                TelegramNotificationService::notifyTripCompleted(
+                    $passenger->telegram_id,
+                    env('TELEGRAM_PASSENGER_BOT_TOKEN'),
+                    $trip->from_address,
+                    $trip->to_address
+                );
+            }
         }
 
         // Списание комиссии с водителя

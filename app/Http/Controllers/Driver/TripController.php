@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Driver;
 use App\Http\Controllers\Controller;
 use App\Models\Commission;
 use App\Models\DriverTrip;
+use App\Models\Passenger;
 use App\Models\PassengerTrip;
 use App\Models\Setting;
+use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
 
 class TripController extends Controller
@@ -97,8 +99,21 @@ class TripController extends Controller
         $trip->update(['status' => 'completed']);
 
         // Complete all bookings for this trip
-        $bookings = $trip->bookings()->where('status', '!=', 'completed')->get();
+        $bookings = $trip->bookings()->where('status', '!=', 'completed')->with('passenger')->get();
         $trip->bookings()->where('status', '!=', 'completed')->update(['status' => 'completed']);
+
+        // Уведомить всех пассажиров что поездка завершена
+        foreach ($bookings as $booking) {
+            $passenger = $booking->passenger;
+            if ($passenger && $passenger->telegram_id) {
+                TelegramNotificationService::notifyTripCompleted(
+                    $passenger->telegram_id,
+                    env('TELEGRAM_PASSENGER_BOT_TOKEN'),
+                    $trip->from_address,
+                    $trip->to_address
+                );
+            }
+        }
 
         // Списание комиссии с водителя за каждое бронирование
         $driver = $request->user();
