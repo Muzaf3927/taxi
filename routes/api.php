@@ -27,6 +27,8 @@ Route::prefix('admin')->group(function () {
         Route::get('/commissions', [CommissionController::class, 'index']);
         Route::get('/drivers', [UserController::class, 'drivers']);
         Route::get('/passengers', [UserController::class, 'passengers']);
+        Route::post('/driver/{id}/toggle-block', [UserController::class, 'toggleDriverBlock']);
+        Route::post('/passenger/{id}/toggle-block', [UserController::class, 'togglePassengerBlock']);
     });
 });
 

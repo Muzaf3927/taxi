@@ -21,4 +21,20 @@ class UserController extends Controller
 
         return response()->json($passengers);
     }
+
+    public function toggleDriverBlock($id)
+    {
+        $driver = Driver::findOrFail($id);
+        $driver->update(['is_blocked' => !$driver->is_blocked]);
+
+        return response()->json(['driver' => $driver]);
+    }
+
+    public function togglePassengerBlock($id)
+    {
+        $passenger = Passenger::findOrFail($id);
+        $passenger->update(['is_blocked' => !$passenger->is_blocked]);
+
+        return response()->json(['passenger' => $passenger]);
+    }
 }
