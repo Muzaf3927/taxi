@@ -67,6 +67,18 @@ class TelegramNotificationService
         );
     }
 
+    public static function notifyDriverCallPassenger(string $chatId, string $passengerName, string $passengerPhone, string $from, string $to)
+    {
+        $telegram = new TelegramService(env('TELEGRAM_DRIVER_BOT_TOKEN'));
+        $telegram->sendMessage((int) $chatId,
+            "📞 <b>Yo'lovchiga qo'ng'iroq qiling!</b>\n\n" .
+            "Siz band qilgan sayohat uchun yo'lovchiga bog'laning:\n\n" .
+            "👤 Yo'lovchi: <b>$passengerName</b>\n" .
+            "📱 Telefon: <b>$passengerPhone</b>\n\n" .
+            "📍 $from → $to"
+        );
+    }
+
     public static function notifyTripCompleted(string $chatId, string $botToken, string $from, string $to)
     {
         $telegram = new TelegramService($botToken);

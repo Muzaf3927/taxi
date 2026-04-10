@@ -62,13 +62,26 @@ class BookingController extends Controller
                 'comment' => $request->comment,
             ]);
 
-            // Notify passenger via Telegram
+            // Notify via Telegram
             $passenger = Passenger::find($trip->passenger_id);
+
             if ($passenger && $passenger->telegram_id) {
+                // Пассажиру — данные водителя
                 TelegramNotificationService::notifyPassenger(
                     $passenger->telegram_id,
                     $driver->name,
                     $driver->phone,
+                    $trip->from_address,
+                    $trip->to_address
+                );
+            }
+
+            // Водителю — данные пассажира (всегда, если есть telegram)
+            if ($passenger && $driver->telegram_id) {
+                TelegramNotificationService::notifyDriverCallPassenger(
+                    $driver->telegram_id,
+                    $passenger->name,
+                    $passenger->phone,
                     $trip->from_address,
                     $trip->to_address
                 );
@@ -113,6 +126,17 @@ class BookingController extends Controller
                     $driver->name,
                     $driver->phone,
                     $booking->seats,
+                    $trip->from_address,
+                    $trip->to_address
+                );
+            }
+
+            // Водителю — номер пассажира
+            if ($passenger && $driver->telegram_id) {
+                TelegramNotificationService::notifyDriverCallPassenger(
+                    $driver->telegram_id,
+                    $passenger->name,
+                    $passenger->phone,
                     $trip->from_address,
                     $trip->to_address
                 );

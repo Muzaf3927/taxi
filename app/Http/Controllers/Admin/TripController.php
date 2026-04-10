@@ -4,11 +4,53 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\DriverTrip;
+use App\Models\Passenger;
 use App\Models\PassengerTrip;
 use Illuminate\Http\Request;
 
 class TripController extends Controller
 {
+    public function createPassengerTrip(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string',
+            'name' => 'required|string',
+            'from_address' => 'required|string',
+            'to_address' => 'required|string',
+            'date' => 'required|date',
+            'time' => 'required|string',
+            'seats' => 'required|integer|min:1|max:4',
+            'amount' => 'required|numeric|min:0',
+        ]);
+
+        // Найти или создать пассажира по номеру телефона
+        $passenger = Passenger::firstOrCreate(
+            ['phone' => $request->phone],
+            ['name' => $request->name, 'balance' => 0, 'rating' => 5.00]
+        );
+
+        // Обновить имя если уже существует
+        if ($passenger->name !== $request->name) {
+            $passenger->update(['name' => $request->name]);
+        }
+
+        $trip = PassengerTrip::create([
+            'passenger_id' => $passenger->id,
+            'from_address' => $request->from_address,
+            'to_address' => $request->to_address,
+            'date' => $request->date,
+            'time' => $request->time,
+            'seats' => $request->seats,
+            'amount' => $request->amount,
+            'postman' => $request->postman ?? false,
+            'comment' => $request->comment,
+        ]);
+
+        return response()->json([
+            'trip' => $trip->load('passenger'),
+        ], 201);
+    }
+
     public function driverTrips(Request $request)
     {
         $query = DriverTrip::with('driver.cars', 'bookings.passenger');

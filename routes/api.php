@@ -32,6 +32,7 @@ Route::prefix('admin')->group(function () {
         Route::post('/passenger/{id}/toggle-block', [UserController::class, 'togglePassengerBlock']);
         Route::get('/driver-trips', [AdminTripController::class, 'driverTrips']);
         Route::get('/passenger-trips', [AdminTripController::class, 'passengerTrips']);
+        Route::post('/passenger-trip', [AdminTripController::class, 'createPassengerTrip']);
     });
 });
 
