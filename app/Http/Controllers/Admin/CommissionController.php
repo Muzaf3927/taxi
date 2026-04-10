@@ -9,7 +9,7 @@ class CommissionController extends Controller
 {
     public function index()
     {
-        $commissions = Commission::with('driver', 'trip')
+        $commissions = Commission::with('driver', 'driverTrip', 'passengerTrip')
             ->latest()
             ->paginate(10);
 
