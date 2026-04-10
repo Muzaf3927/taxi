@@ -40,7 +40,7 @@ class BookingController extends Controller
             }
 
             $driver = $request->user();
-            $percentage = (float) Setting::where('name', 'commission_percentage')->value('value');
+            $percentage = (float) (Setting::where('name', 'commission_percentage')->value('value') ?? 0);
             $commissionAmount = $trip->amount * $percentage / 100;
 
             if ($driver->balance < $commissionAmount) {
@@ -230,7 +230,7 @@ class BookingController extends Controller
 
         // Списание комиссии с водителя
         $driver = $request->user();
-        $percentage = (float) Setting::where('name', 'commission_percentage')->value('value');
+        $percentage = (float) (Setting::where('name', 'commission_percentage')->value('value') ?? 0);
 
         if ($percentage > 0) {
             $commissionAmount = $booking->offered_price * $percentage / 100;

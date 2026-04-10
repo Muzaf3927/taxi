@@ -17,14 +17,6 @@ class TripController extends Controller
     {
         $driver = $request->user();
 
-        if ($driver->balance < 10000) {
-            $deficit = 10000 - $driver->balance;
-            return response()->json([
-                'message' => "Balansingiz yetarli emas. Sayohat yaratish uchun hisobingizni {$deficit} so'mga to'ldiring.",
-                'deficit' => $deficit,
-            ], 403);
-        }
-
         $trip = DriverTrip::create([
             'driver_id' => $driver->id,
             'from_address' => $request->from_address,
@@ -117,7 +109,7 @@ class TripController extends Controller
 
         // Списание комиссии с водителя за каждое бронирование
         $driver = $request->user();
-        $percentage = (float) Setting::where('name', 'commission_percentage')->value('value');
+        $percentage = (float) (Setting::where('name', 'commission_percentage')->value('value') ?? 0);
 
         if ($percentage > 0) {
             $totalCommission = 0;
